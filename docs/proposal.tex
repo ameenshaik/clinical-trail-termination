@@ -1,0 +1,43 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+
+\title{Predicting Early Termination of Clinical Trials from Registration-Time Information}
+
+\author{Ameen Shaik (002534243) \and Mohana Harshita Rangubhotla (002523567)}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\abstract
+Many clinical trials are stopped early instead of reaching completion, wasting funding and exposing participants to risk without producing usable evidence. We propose a binary classification project that predicts whether an interventional trial will be completed or terminated, using only information available when the trial is registered, such as phase, number of sites, sponsor type, and eligibility design. Using the public AACT database of ClinicalTrials.gov records (187,035 trials), we will compare logistic regression, support vector machines, and a deep neural network implemented in PyTorch, with a random forest as an additional baseline. We will tune hyperparameters with cross-validation, handle class imbalance, and evaluate on a time-based held-out set.
+
+\section{Introduction}
+Clinical trials are the main route by which new treatments reach patients, and they are expensive and slow. A trial that is terminated early, commonly due to poor recruitment, lack of funding, or sponsor decisions, consumes resources and the goodwill of volunteers while often producing no conclusive result. We define the problem as follows: given the design and administrative features of an interventional trial as registered at its start, predict whether the trial will end as \emph{Completed} or \emph{Terminated}.
+
+This problem matters because a reliable early-warning score would let sponsors, review boards, and funding agencies revisit a risky design (for example, adding sites or relaxing eligibility criteria) before a trial begins. The main challenges are (i) \emph{label leakage}, since many registry fields are updated after a trial ends and can reveal the outcome; (ii) \emph{class imbalance}, since terminated trials are a minority; (iii) \emph{heterogeneous, mostly categorical features} with substantial missing values; and (iv) \emph{distribution shift over time}, since registration practices change across years. Applications include trial feasibility assessment and sponsor risk management.
+
+\section{Proposed Project}
+\textbf{Task.} This is a binary \emph{classification} problem: label 0 = Completed, label 1 = Terminated.
+
+\textbf{Dataset.} We use AACT (Aggregate Analysis of ClinicalTrials.gov) \cite{aact}, a free PostgreSQL database maintained by the Clinical Trials Transformation Initiative that mirrors all ClinicalTrials.gov \cite{ctgov} records. We query it from Python (snapshot of October 31, 2026; the SQL query is saved in our repository). We keep interventional studies whose final status is Completed or Terminated and whose start date lies between 2005 and 2019 to avoid right-censoring. We exclude ongoing studies (outcome unknown), withdrawn studies (stopped before enrolling anyone, which leaks the label through enrollment), and suspended studies. The resulting dataset has \textbf{187,035 samples in 2 classes}: 165,648 Completed and 21,387 Terminated (11.4\%), well above the 500-per-class minimum. We split by start year: 2005--2015 for training and cross-validation (123,974 trials: 109,752 / 14,222) and 2016--2019 as the held-out test set (63,061 trials: 55,896 / 7,165).
+
+\textbf{Features.} Feature vectors are not provided directly; we extract them by joining several AACT tables (studies, designs, sponsors, facilities, countries, eligibilities, interventions, conditions). All features are known at registration: \emph{design} (phase, number of arms, randomized allocation, masking level, primary purpose); \emph{scale} (number of sites and countries); \emph{sponsor} (lead sponsor class such as industry, NIH, or other; number of collaborators); \emph{intervention and condition} (intervention types such as drug, device, or behavioral; number of conditions); \emph{eligibility} (minimum/maximum age, healthy volunteers accepted, length of the eligibility-criteria text); and \emph{oversight and time} (data monitoring committee, FDA-regulated product, start year). As a stretch goal, we will extract text features from each trial's brief summary (TF-IDF for classical models, sentence embeddings for the DNN).
+
+\textbf{Preprocessing.} Categorical features will be one-hot encoded, skewed counts log-transformed, and numeric features standardized. FDA-regulation flags are missing for 65\% of trials (they exist only for newer registrations), so missingness is kept as its own category; a missing maximum age means no upper age limit and is encoded as such. Leakage removal is central: we drop the ``why stopped'' field, completion dates, posted results, and last-update information. Enrollment needs special care: ClinicalTrials.gov replaces the planned target with the actual count once a trial ends, and about 96\% of trials in both classes report actual enrollment. Since terminated trials usually enroll fewer participants than planned, this field leaks the outcome, so our main models exclude it and an ablation including it will quantify the leakage.
+
+\textbf{Methods.} All code will be in Python, using scikit-learn \cite{sklearn} for classical models and PyTorch \cite{pytorch} for the neural network: (1) \emph{logistic regression} with L1/L2 regularization; (2) \emph{SVM}, linear on the full training set and RBF-kernel on a stratified subsample, since kernel SVMs scale poorly with sample size; (3) a \emph{deep neural network}, a feed-forward MLP with 2--3 hidden layers, ReLU, batch normalization, dropout, Adam, and class-weighted cross-entropy loss; and (4) a \emph{random forest} as an additional non-linear baseline and source of feature importances.
+
+\textbf{Evaluation.} Hyperparameters will be tuned with stratified 5-fold cross-validation on the training period (C and penalty for logistic regression; C, kernel, and $\gamma$ for SVM; depth, width, learning rate, dropout, and batch size for the MLP; number of trees and depth for the random forest), and we will report how performance varies with each. Because of class imbalance, we will report ROC-AUC, PR-AUC, F1-score, and balanced accuracy, and compare class-weighted against unweighted training. Finally, all models will be compared on the time-based test set.
+
+\begin{thebibliography}{9}
+\bibitem{aact} Clinical Trials Transformation Initiative. AACT: Aggregate Analysis of ClinicalTrials.gov. \url{https://aact.ctti-clinicaltrials.org}
+\bibitem{ctgov} U.S. National Library of Medicine. ClinicalTrials.gov. \url{https://clinicaltrials.gov}
+\bibitem{sklearn} F.~Pedregosa et al. Scikit-learn: Machine learning in Python. \emph{Journal of Machine Learning Research}, 12:2825--2830, 2011.
+\bibitem{pytorch} A.~Paszke et al. PyTorch: An imperative style, high-performance deep learning library. In \emph{NeurIPS}, 2019.
+\end{thebibliography}
+
+\end{document}
